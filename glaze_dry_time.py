@@ -4,8 +4,8 @@ Glaze Dry Time Estimator — plain Python, functions only.
 - Glaze types: normal / medium / fast
 - Environments: basement / upstairs / outside
 - Shapes: plate / mug / bowl / cylinder / vase / sculpture / unknown
-- All dimensions in inches; temperature in °F
-- Final estimate is rounded UP to the next whole hour
+- Dimensions in inches; temperature in °F
+- Final estimate rounds UP to the next whole hour
 """
 
 import math
@@ -14,6 +14,7 @@ import math
 # Small input helpers
 # -----------------------------
 def prompt_choice(prompt, choices):
+    # Menu-style input. Lowercased to keep it consistent.
     menu = "/".join(choices)
     while True:
         val = input(f"{prompt} [{menu}]: ").strip().lower()
@@ -22,7 +23,7 @@ def prompt_choice(prompt, choices):
         print(f"Please enter one of: {menu}")
 
 def prompt_int(prompt, min_val=None, max_val=None):
-    # Whole-number input with basic range checks.
+    # Whole number with simple bounds.
     while True:
         raw = input(f"{prompt}: ").strip()
         if raw.lstrip("-").isdigit():
@@ -35,7 +36,7 @@ def prompt_int(prompt, min_val=None, max_val=None):
         print("Please enter a whole number.")
 
 def prompt_float_pos(prompt, min_val=0.0, allow_zero=False):
-    # Positive float input (optionally allowing zero). Friendly errors.
+    # Positive float (optionally allowing zero). Friendly errors.
     while True:
         raw = input(f"{prompt}: ").strip()
         try:
@@ -51,12 +52,13 @@ def prompt_float_pos(prompt, min_val=0.0, allow_zero=False):
             print("Please enter a number (e.g., 7 or 7.5).")
 
 # -----------------------------
-# Shape → area proxy (in²)
+# Ask dimensions now → compute area proxy (in²)
 # -----------------------------
-def area_proxy_square_inches(shape):
+def get_area_proxy_from_user(shape):
     """
-    Super simple surface-area proxies to scale time.
-    These are intentionally rough so the model stays transparent and easy to tweak.
+    Ask for dimensions immediately after selecting shape.
+    Returns a rough surface-area proxy in square inches.
+    Keeping it simple so it's easy to tweak later.
     """
     if shape == "plate":
         d = prompt_float_pos("Plate diameter (inches)")
@@ -79,7 +81,7 @@ def area_proxy_square_inches(shape):
         return math.pi * d * h + (math.pi * (d / 2) ** 2)
 
     if shape == "vase":
-        # Quick-and-clean frustum (tapered cylinder) proxy
+        # Frustum (tapered cylinder) proxy: quick and decent
         h  = prompt_float_pos("Vase height (inches)")
         d1 = prompt_float_pos("Top diameter (inches)")
         d2 = prompt_float_pos("Bottom diameter (inches)")
@@ -102,15 +104,13 @@ def area_proxy_square_inches(shape):
     return (L ** 2) * 0.8
 
 # -----------------------------
-# Core model
+# Core model (uses area already computed)
 # -----------------------------
-def estimate_hours(glaze_type, coats, environment, temp_f, shape):
+def estimate_hours(glaze_type, coats, environment, temp_f, area_in2):
     """
-    time = k * area_proxy * coat_mult * glaze_mult * env_mult * temp_mult
+    time = k * area_in2 * coat_mult * glaze_mult * env_mult * temp_mult
     then +10% safety, min floor, and round UP to the next hour.
     """
-    area_in2 = area_proxy_square_inches(shape)
-
     # Base constant (hours per square inch). Tuned to feel right in a studio.
     k = 0.11
 
@@ -118,18 +118,10 @@ def estimate_hours(glaze_type, coats, environment, temp_f, shape):
     coat_mult = 1.0 + 0.25 * max(coats - 1, 0)
 
     # Glaze speed: small nudges (you said differences are minor).
-    glaze_mult = {
-        "fast":   0.93,
-        "medium": 1.00,
-        "normal": 1.05,
-    }[glaze_type]
+    glaze_mult = {"fast": 0.93, "medium": 1.00, "normal": 1.05}[glaze_type]
 
     # Environment: airflow + general drying vibe.
-    env_mult = {
-        "basement": 1.25,  # slow/stagnant air
-        "upstairs": 1.00,  # baseline
-        "outside":  0.85,  # breezy, faster
-    }[environment]
+    env_mult = {"basement": 1.25, "upstairs": 1.00, "outside": 0.85}[environment]
 
     # Temperature (°F): relative to 72°F, ~0.5% per °F. Clamped to keep it sane.
     temp_mult = 1.0 - 0.005 * (temp_f - 72.0)
@@ -142,7 +134,7 @@ def estimate_hours(glaze_type, coats, environment, temp_f, shape):
     hours *= 1.10
     hours = max(0.5, hours)
 
-    # You asked to always round UP to the next whole hour.
+    # Always round UP to the next whole hour.
     rounded_up = math.ceil(hours)
 
     breakdown = {
@@ -163,19 +155,21 @@ def estimate_hours(glaze_type, coats, environment, temp_f, shape):
 def main():
     print("Glaze Dry Time Estimator\n")
 
-    # Ask the non-geometry stuff first (per your request).
+    # Ask non-geometry stuff first (your request).
     glaze = prompt_choice("Glaze drying type", ["normal", "medium", "fast"])
     coats = prompt_int("Number of coats (whole number)", min_val=1)
     env   = prompt_choice("Environment", ["basement", "upstairs", "outside"])
     tempf = prompt_float_pos("Temperature (°F)", min_val=-50, allow_zero=True)
 
-    # Now pick the piece likely to be the slowest and grab its dims.
+    # Immediately ask shape and dimensions (so it feels more direct).
     shape = prompt_choice(
         "Shape (pick the piece likely to take the longest)",
         ["plate", "mug", "bowl", "cylinder", "vase", "sculpture", "unknown"],
     )
+    area_in2 = get_area_proxy_from_user(shape)
 
-    final_hours, info = estimate_hours(glaze, coats, env, tempf, shape)
+    # Estimate using the area we just computed.
+    final_hours, info = estimate_hours(glaze, coats, env, tempf, area_in2)
 
     print("\n=== Estimate ===")
     print(f"Estimated drying time: {final_hours} hours (rounded up)")
@@ -187,4 +181,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
