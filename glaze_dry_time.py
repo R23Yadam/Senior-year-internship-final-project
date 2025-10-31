@@ -14,7 +14,6 @@ import math
 # Small input helpers
 # -----------------------------
 def prompt_choice(prompt, choices):
-    # Menu-style input. Lowercased to keep it consistent.
     menu = "/".join(choices)
     while True:
         val = input(f"{prompt} [{menu}]: ").strip().lower()
